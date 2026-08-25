@@ -1,0 +1,10 @@
+# dsh-inform 的组合层：向 profile 插入宿主半体一行。
+# 浏览器半体不需要 patch 行——modules 插件按 `dsh.client` 字段自动扫描并伺服。
+# config 是本插件设置命名空间的 base 层（用户层在 $DSH_HOME/settings.yaml 的 dsh-inform: 段）。
+- insert:
+    - id: inform
+      name: dsh-inform
+      config:
+        notifyOnComplete: true
+        notifyOnApproval: true
+        notifyOnAnswer: true

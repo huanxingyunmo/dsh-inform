@@ -1,0 +1,7 @@
+node_modules/
+.npmcache/
+.scratch/
+.pnpm-store/
+.npmrc
+*.tsbuildinfo
+# 注意：lib/ 构建产物随仓库分发（GitHub 安装方式依赖它），不要忽略。
