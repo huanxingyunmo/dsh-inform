@@ -1,4 +1,4 @@
-# @mobaixingyao/dsh-inform
+# dsh-inform
 
 DSH 任务提醒插件：当 DSH **完成任务**、**需要批准**、**需要回答** 时发出提醒。
 默认仅发 **操作系统级系统通知**（浏览器 Notification API，设置页一键授权）；
