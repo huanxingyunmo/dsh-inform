@@ -3,7 +3,7 @@
 # config 是本插件设置命名空间的 base 层（用户层在 $DSH_HOME/settings.yaml 的 dsh-inform: 段）。
 - insert:
     - id: inform
-      name: dsh-inform
+      name: "@mobaixingyao/dsh-inform"
       config:
         notifyOnComplete: true
         notifyOnApproval: true

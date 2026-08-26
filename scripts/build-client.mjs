@@ -22,6 +22,9 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
 
+/** loader id 必须与 npm 包名一致（宿主按包名生成 /plugins/<id>/client.js 的加载 URL）。 */
+const PACKAGE_NAME = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name
+
 /** 允许出现在产物里的运行时 require 目标（平台种子模块）。 */
 const ALLOWED_REQUIRE = new Set(['react', 'react/jsx-runtime'])
 
@@ -44,7 +47,7 @@ function esbuildBinary() {
 
 const BANNER = [
     'window.__ModuleLoader__.load({',
-    '\tid: "dsh-inform",',
+    `\tid: ${JSON.stringify(PACKAGE_NAME)},`,
     '\tfactory: (require) => {',
     '\t\tvar module = { exports: {} };',
     '\t\tvar exports = module.exports;',

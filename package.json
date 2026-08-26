@@ -1,5 +1,5 @@
 {
-  "name": "dsh-inform",
+  "name": "@mobaixingyao/dsh-inform",
   "description": "DSH 任务提醒插件：任务完成/需要批准/需要回答时发系统通知（可选页面浮层与自定义音频），三类事件独立开关",
   "version": "0.1.1",
   "type": "module",
