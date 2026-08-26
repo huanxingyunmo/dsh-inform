@@ -1,4 +1,4 @@
-# dsh-inform
+# @mobaixingyao/dsh-inform
 
 DSH 任务提醒插件：当 DSH **完成任务**、**需要批准**、**需要回答** 时发出提醒。
 默认仅发 **操作系统级系统通知**（浏览器 Notification API，设置页一键授权）；
@@ -24,9 +24,10 @@ DSH 任务提醒插件：当 DSH **完成任务**、**需要批准**、**需要�
 | 设置 | 默认 | 说明 |
 | --- | --- | --- |
 | 任务完成/需要批准/需要回答 | 开 | 三类事件的独立开关 |
-| 系统通知 | —（授权制） | 点「开启系统通知」向浏览器申请权限 |
 | 启动器 UI 弹窗 | **关** | 提醒时在页面右上角同时显示浮层卡片 |
 | 自定义提醒音频 | **不启用** | 点「选择本地音频文件…」上传（存入 DSH 数据目录）；提醒时**从头播放、最长 5 秒**；支持试听 |
+
+系统通知权限不单独占一行：首次点「触发测试弹窗」时借点击手势向浏览器申请，授权一次后长期有效（被拒绝需到站点设置恢复）。
 
 音频播放规则固定：从第 0 秒开始，最多 5 秒后自动关闭。上传的文件由宿主代理伺服（浏览器不能直接读盘），扩展名白名单 mp3/wav/ogg/m4a/flac/aac/webm、30MB 上限；也接受 http(s) URL 或本地路径作为来源。自动播放被浏览器策略拒绝时，会在下一次页面点击后自动补播一次。
 
@@ -45,20 +46,20 @@ npm run verify                 # typecheck(双 program) + build(host tsc + clien
 
 ```sh
 # 从 npm 安装（推荐）
-npx -p @deepseek-ai/dsh dsh plugin --profile web add dsh-inform
+dsh plugin --profile web add @mobaixingyao/dsh-inform
 
 # 或从 GitHub 安装
-npx -p @deepseek-ai/dsh dsh plugin --profile web add github:mobaixingyao/dsh-inform
+dsh plugin --profile web add github:mobaixingyao/dsh-inform
 
 # 或本地目录安装（开发迭代）
-npx -p @deepseek-ai/dsh dsh plugin --profile web add <本仓库克隆目录>
+dsh plugin --profile web add <本仓库克隆目录>
 ```
 
 安装后重启该 profile。验证：
 
 1. `dsh --profile web --dump-config` 末尾出现 `# == dsh-inform` 层与 `inform` 行；
-2. 打开 GUI，首页 boot 花名册包含 `/plugins/dsh-inform/client.js?rev=…`；
-3. 设置页出现"任务提醒"分区（三类开关 + 系统通知 + UI 弹窗 + 自定义音频）；点「开启系统通知」并「触发测试弹窗」，系统通知应弹出。
+2. 打开 GUI，首页 boot 花名册包含 `/plugins/@mobaixingyao%2Fdsh-inform/client.js?rev=…`（scope 包名 URL 编码后出现在加载地址里）；
+3. 设置页出现"任务提醒"分区（三类开关 + UI 弹窗 + 自定义音频）；首次点「触发测试弹窗」会顺带申请系统通知权限，随后系统通知应弹出。
 
 浏览器半体的构建复刻了官方 `packages/client/tsdown.client.ts` 的 lazy-CJS 工厂格式，并带纯度门：产物只允许 `require('react' | 'react/jsx-runtime')`。
 
