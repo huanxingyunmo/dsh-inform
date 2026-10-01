@@ -1,0 +1,12 @@
+packages:
+  - .
+
+# Windows 上 pnpm 默认的 isolated 链接在本仓库的依赖图上会失败（顶层直接依赖的
+# 链接不落地），hoisted 与 DSH profile 侧一致，且构建产物可直接被相对解析。
+nodeLinker: hoisted
+
+# pnpm 11 默认不执行依赖的构建脚本。esbuild 的 postinstall 只是平台二进制的
+# 兜底安装器：@esbuild/win32-x64 已由 optionalDependencies 提供，脚本失败反而会
+# 让整次 install 回滚，这里显式关掉。
+allowBuilds:
+  esbuild: false

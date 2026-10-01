@@ -6,7 +6,9 @@
  * 轮询器的取数函数可注入，便于在 Node 测试里驱动确定性序列。
  */
 import { isRemindState, type RemindItem, type RemindKind, type RemindState } from '../wire.js'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+// 0.2 起客户端设置面由 `settingsScope` 服务改为 `ctx.configForms` 派生的 ConfigForm：
+// 读面（getSnapshot/subscribe）与写面（set/unset）与旧 scoped 设置面同形。
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 
 export interface ToastModel {
     /** 稳定 React key；与来源条目 id 解耦（测试弹窗没有真实 id）。 */
@@ -88,8 +90,8 @@ export class RemindStore {
     private toastSeq = 0
     private readonly seenItemIds = new Set<number>()
     private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
-    /** 绑定的设置命名空间 scope；ui-settings 未组合时为 null（开关页降级为只读提示）。 */
-    private scope: SettingsScope<RemindSettings> | null = null
+    /** 绑定的设置命名空间表单；ui-settings 未组合时为 null（开关页降级为只读提示）。 */
+    private scope: ConfigForm<RemindSettings> | null = null
 
     /**
      * 送达钩子：页面内弹窗入栈时同步调用（含测试弹窗）。
@@ -196,13 +198,13 @@ export class RemindStore {
     // ---- 内部 ----
 
     /**
-     * 绑定 `dsh-inform` 命名空间 scope（apply 期调用一次），并把它接进快照。
-     * 返回解绑函数；scope 自身的释放归调用 fiber。
+     * 绑定 `dsh-inform` 命名空间表单（apply 期调用一次），并把它接进快照。
+     * 返回解绑函数；表单自身的释放归调用 fiber。
      */
-    attachSettings(scope: SettingsScope<RemindSettings>): () => void {
+    attachSettings(scope: ConfigForm<RemindSettings>): () => void {
         this.scope = scope
         const sync = (): void => {
-            const snap: SettingsScopeSnapshot<RemindSettings> = scope.getSnapshot()
+            const snap: ConfigFormSnapshot<RemindSettings> = scope.getSnapshot()
             const value = snap.value
             this.setSettings(snap.status, snap.writable)
             this.setEnabled({

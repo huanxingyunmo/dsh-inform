@@ -7,8 +7,10 @@
  * import 纯度：除平台种子模块 react/jsx-runtime 外零值导入；
  * 全部 @deepseek-ai/* 依赖均为 type-only（构建期被擦除）。
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SettingsScopeBinder } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// 0.2 起设置面由 `ctx.configForms` 提供（ConfigForm 契约）；SettingsScopeBinder 已随
+// dsh-client-runtime 一并下线。`ctx.slots` 的类型贡献改由 ui-renderer 的 client 面提供。
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // SlotMap 类型贡献：type-only 拉入 'shell.overlay' 与 'settings.section' 的声明合并。
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -19,8 +21,15 @@ import { playReminderSound, stopAllReminderSounds } from './sound.js'
 import { INFORM_STYLE_SHEET, ToastStack } from './toasts.js'
 import { RemindSection } from './section.js'
 
-/** 必需服务：slot 注册表。settingsScope 为可选服务，运行时 ctx.get 判定。 */
-export const inject = ['slots']
+/**
+ * 本插件的设置命名空间（= 宿主 Loader 条目 id）。
+ * 字面书写而不从宿主半体 import：客户端产物有纯度门，不得依赖宿主包。
+ * 与 `src/index.ts` 的 `INFORM_NAMESPACE`、`cordis.patch.yml` 的 insert `id` 必须逐字一致。
+ */
+const INFORM_NAMESPACE = 'dsh-inform'
+
+/** 必需服务：slot 注册表 + 设置表单（设置域的 base 服务，随 Web 组合提供）。 */
+export const inject = ['slots', 'configForms']
 
 export function apply(ctx: ClientContext): void {
     const store = new RemindStore()
@@ -37,17 +46,12 @@ export function apply(ctx: ClientContext): void {
         }
     }, 'dsh-inform: stylesheet')
 
-    // 可选服务：ui-settings 在组合里存在时绑定命名空间；否则降级为默认开启。
+    // 设置表单：按宿主 Loader 条目 id 取共享 ConfigForm（provider 持有，本插件不解绑）。
+    // 命名空间未被伺服或连接为 memory 模式时，表单快照自身报 'unavailable'，开关页降级为只读提示。
     try {
-        const binder = ctx.get('settingsScope') as SettingsScopeBinder | undefined
-        if (binder && typeof binder.bind === 'function') {
-            // bind 的释放归调用 fiber（服务代理在调用点绑定 caller 上下文）。
-            const scope = binder.bind<RemindSettings>({ namespace: 'dsh-inform' })
-            const detach = store.attachSettings(scope)
-            ctx.effect(() => detach, 'dsh-inform: settings scope')
-        } else {
-            store.setSettings('unavailable', false)
-        }
+        const scope = ctx.configForms.get<RemindSettings>(INFORM_NAMESPACE)
+        const detach = store.attachSettings(scope)
+        ctx.effect(() => detach, 'dsh-inform: settings form')
     } catch {
         store.setSettings('unavailable', false)
     }

@@ -1,8 +1,12 @@
 # dsh-inform 的组合层：向 profile 插入宿主半体一行。
 # 浏览器半体不需要 patch 行——modules 插件按 `dsh.client` 字段自动扫描并伺服。
-# config 是本插件设置命名空间的 base 层（用户层在 $DSH_HOME/settings.yaml 的 dsh-inform: 段）。
+#
+# 0.2 起设置命名空间 **就是这一行的 id**：settings 服务按 Loader 条目 id 投影表单，
+# 浏览器半体按同一 id 调 `ctx.configForms.get('dsh-inform')`。
+# 因此 id 必须与 src/index.ts 的 `INFORM_NAMESPACE` 逐字一致，改动即破坏设置页绑定。
+# config 是设置文档的 base 层（用户层在 profile 的 cordis.patch.yml / 设置页写入）。
 - insert:
-    - id: inform
+    - id: dsh-inform
       name: "@mobaixingyao/dsh-inform"
       config:
         notifyOnComplete: true

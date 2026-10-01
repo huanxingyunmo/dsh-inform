@@ -7,7 +7,7 @@
  * import 纯度：除平台种子模块 react/jsx-runtime 外零值导入；
  * 全部 @deepseek-ai/* 依赖均为 type-only（构建期被擦除）。
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
-/** 必需服务：slot 注册表。settingsScope 为可选服务，运行时 ctx.get 判定。 */
+import type { Context as ClientContext } from '@deepseek-ai/cordis';
+/** 必需服务：slot 注册表 + 设置表单（设置域的 base 服务，随 Web 组合提供）。 */
 export declare const inject: string[];
 export declare function apply(ctx: ClientContext): void;

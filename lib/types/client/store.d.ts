@@ -6,7 +6,7 @@
  * 轮询器的取数函数可注入，便于在 Node 测试里驱动确定性序列。
  */
 import { type RemindKind, type RemindState } from '../wire.js';
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client';
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client';
 export interface ToastModel {
     /** 稳定 React key；与来源条目 id 解耦（测试弹窗没有真实 id）。 */
     readonly key: string;
@@ -65,7 +65,7 @@ export declare class RemindStore {
     private toastSeq;
     private readonly seenItemIds;
     private readonly timers;
-    /** 绑定的设置命名空间 scope；ui-settings 未组合时为 null（开关页降级为只读提示）。 */
+    /** 绑定的设置命名空间表单；ui-settings 未组合时为 null（开关页降级为只读提示）。 */
     private scope;
     /**
      * 送达钩子：页面内弹窗入栈时同步调用（含测试弹窗）。
@@ -95,10 +95,10 @@ export declare class RemindStore {
     /** 本地测试弹窗：不经过服务端，便于用户在设置页验证外观。 */
     pushTest(kind: RemindKind): void;
     /**
-     * 绑定 `dsh-inform` 命名空间 scope（apply 期调用一次），并把它接进快照。
-     * 返回解绑函数；scope 自身的释放归调用 fiber。
+     * 绑定 `dsh-inform` 命名空间表单（apply 期调用一次），并把它接进快照。
+     * 返回解绑函数；表单自身的释放归调用 fiber。
      */
-    attachSettings(scope: SettingsScope<RemindSettings>): () => void;
+    attachSettings(scope: ConfigForm<RemindSettings>): () => void;
     /** 写一个开关字段（覆盖用户层）；设置不可写时静默忽略。数值/文本字段同样支持。 */
     setField(field: keyof RemindSettings, value: boolean | number | string): Promise<void>;
     /** 清除全部覆盖：所有字段回到组合 base / schema 默认。 */

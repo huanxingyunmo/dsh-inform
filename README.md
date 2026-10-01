@@ -3,7 +3,10 @@
 DSH 任务提醒插件：当 DSH **完成任务**、**需要批准**、**需要回答** 时发出提醒。
 默认仅发 **操作系统级系统通知**（浏览器 Notification API，设置页一键授权）；
 页面内（启动器 UI）浮层与自定义提醒音频默认关闭，均可在 **设置 → 任务提醒** 页面开启。
-所有开关持久化到用户设置文档（`$DSH_HOME/settings.yaml` 的 `dsh-inform:` 段）。
+所有开关持久化到 profile 设置文档中 **Loader 条目 id `dsh-inform`** 对应的段（0.2 起设置命名空间即条目 id，见下方「设置命名空间」）。
+
+> **兼容性**：本版本（`0.2.0-rc.2`）对齐 **dsh 0.2.0-rc.2** 运行时，与 0.1.x 线不兼容。
+> 0.1.x 运行时请使用 `@mobaixingyao/dsh-inform@0.1.1`。
 
 ## 运行面
 
@@ -31,16 +34,30 @@ DSH 任务提醒插件：当 DSH **完成任务**、**需要批准**、**需要�
 
 音频播放规则固定：从第 0 秒开始，最多 5 秒后自动关闭。上传的文件由宿主代理伺服（浏览器不能直接读盘），扩展名白名单 mp3/wav/ogg/m4a/flac/aac/webm、30MB 上限；也接受 http(s) URL 或本地路径作为来源。自动播放被浏览器策略拒绝时，会在下一次页面点击后自动补播一次。
 
-开关只在浏览器侧生效：切换立即生效，无需宿主参与。宿主通过 `installSettingsSection` 注册命名空间（entry 配置作为 base 层），settings 服务缺席的组合自动回退 entry 配置。
+开关只在浏览器侧生效：切换立即生效，无需宿主参与。宿主半体声明 `Config` schema（字段全部 `volatile()`），并在代读音频时经 `config.<字段>.get()` 取实时值。
+
+### 设置命名空间（0.2 变更）
+
+0.2 起 settings 服务按 **Loader 条目 id** 投影插件设置页，插件不再自行注册命名空间。因此：
+
+- 浏览器半体按 `ctx.configForms.get('dsh-inform')` 取设置表单（读 `getSnapshot()`/`subscribe()`，写 `set()`/`unset()`）；
+- `cordis.patch.yml` 里 insert 行的 `id`、`src/index.ts` 的 `INFORM_NAMESPACE`、`src/client/index.tsx` 的 `INFORM_NAMESPACE` 三处必须逐字一致，改一处即断开设置页绑定；
+- 运行时依赖（`@deepseek-ai/cordis`、`@deepseek-ai/schemastery`）声明为 **peerDependencies**，`dependencies` 为空——插件不会把自己的副本提升进 profile 去遮蔽运行时自带的那一份。
 
 ## 从源码构建
 
 ```sh
-npm install --ignore-scripts   # esbuild 平台二进制由 optionalDependencies 提供
-npm run verify                 # typecheck(双 program) + build(host tsc + client 工厂包装/纯度门) + test
+pnpm install     # 依赖走 pnpm 11；esbuild 平台二进制由 optionalDependencies 提供
+pnpm run verify  # typecheck(双 program) + build(host tsc + client 工厂包装/纯度门) + test
 ```
 
-测试矩阵：纯折叠逻辑单测（毫秒级零宿主）+ **真实组合集成测试**（真 cordis Context + 真 dsh-session 会话总线 + 真 dsh-host-webserver + 内存版 settings provider，覆盖状态与音频两个端点）+ jsdom 客户端 UI 挂载测试。
+`pnpm-workspace.yaml` 固定了两项：`nodeLinker: hoisted`（Windows 上 isolated 链接在本
+依赖图上不落地）与 `allowBuilds: esbuild: false`（其 postinstall 只是平台二进制的兜底
+安装器，失败反而会让整次 install 回滚）。
+
+测试矩阵：纯折叠逻辑单测（毫秒级零宿主）+ **真实组合集成测试**（真 cordis Context +
+真 dsh-session 会话总线 + 真 dsh-host-webserver + 受控 volatile 配置面，覆盖状态与音频
+两个端点）+ jsdom 客户端 UI 挂载测试。
 
 ## 安装
 
@@ -57,7 +74,7 @@ dsh plugin --profile web add <本仓库克隆目录>
 
 安装后重启该 profile。验证：
 
-1. `dsh --profile web --dump-config` 末尾出现 `# == dsh-inform` 层与 `inform` 行；
+1. `dsh --profile web --dump-config` 末尾出现 `# == dsh-inform` 层与 `dsh-inform` 行；
 2. 打开 GUI，首页 boot 花名册包含 `/plugins/@mobaixingyao%2Fdsh-inform/client.js?rev=…`（scope 包名 URL 编码后出现在加载地址里）；
 3. 设置页出现"任务提醒"分区（三类开关 + UI 弹窗 + 自定义音频）；首次点「触发测试弹窗」会顺带申请系统通知权限，随后系统通知应弹出。
 

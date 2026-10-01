@@ -1,8 +1,8 @@
 /**
  * 设置页分区：三类提醒的独立开关 + UI 浮层开关 + 自定义音频 + 连接状态。
  *
- * 开关经 `ctx.settingsScope` 的 `dsh-inform` 命名空间 scope 写入
- * `$DSH_HOME/settings.yaml`（宿主注册的同一份文档），revision 由 scope 契约 fencing。
+ * 开关经 `ctx.configForms` 的 `dsh-inform` 表单（= 宿主 Loader 条目 id）写入设置文档，
+ * revision 由 ConfigForm 契约 fencing；读取走同一表单的快照，改完即生效。
  */
 import { useRef, useState as useReactState, useSyncExternalStore } from 'react'
 import type { EnabledFlags, RemindSettings, RemindStore } from './store.js'

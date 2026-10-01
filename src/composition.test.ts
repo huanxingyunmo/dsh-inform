@@ -1,63 +1,87 @@
 /**
  * 组合集成测试：真实 cordis Context + 真实 dsh-session 会话事件总线 +
- * 真实 dsh-host-webserver，验证本插件从事件到 HTTP 端点的完整链路，
- * 以及 settings 命名空间在真实 provider 上的注册/解析/写入。
+ * 真实 dsh-host-webserver，验证本插件从事件到 HTTP 端点的完整链路。
  *
- * 模板对齐 `@dsh-std/adapter-dsh` fixture 的组合方式：new Context →
- * provide 服务 → await 插件 → 断言用户可见表面 → dispose。
+ * 0.2 起 settings 面被重写：插件不再注册设置命名空间（settings 服务按 Loader
+ * 条目 id 自动投影），因此这里不再挂内存版 settings provider，而是把**受控的
+ * volatile 配置面**直接喂给 `apply` —— 其形状与 cordis 交给 `apply` 的一致
+ * （volatile 字段是 `{ get() }` 只读引用），并可在测试内改值以验证"改动即时生效"。
+ *
+ * 模板对齐真实组合方式：new Context → provide 服务 → await 插件 →
+ * 断言用户可见表面 → dispose。
  */
 import assert from 'node:assert/strict'
 import { afterEach, describe, it } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import type { Fiber } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionStore, type Session } from '@deepseek-ai/dsh-session'
-import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
 import { WebServer } from '@deepseek-ai/dsh-host-webserver'
-import { apply as remindPlugin, Config } from './index.js'
+import { apply as remindPlugin, Config, type ConfigView, type LiveField } from './index.js'
 import { SOUND_PATH, SOUND_UPLOAD_PATH, STATE_PATH } from './http.js'
 
 function pathJoin(base: string, rest: string): string {
     return rest.match(/^[A-Za-z]:[\\/]/) ? rest : `${base.replace(/[\\/]+$/, '')}/${rest}`
 }
 
-/** 内存版 settings provider：走真实 SettingsProvider 注册/解析/写路径。 */
-class MemorySettings extends SettingsProvider {
-    override readonly writable = true
-    private doc: Record<string, unknown> = {}
+/** 配置字段的纯值形状（去掉 volatile 引用层）。 */
+type ConfigValues = {
+    notifyOnComplete: boolean
+    notifyOnApproval: boolean
+    notifyOnAnswer: boolean
+    uiPopup: boolean
+    soundEnabled: boolean
+    soundPath: string
+}
 
-    constructor(ctx: Context) {
-        super(ctx)
-    }
+const DEFAULTS: ConfigValues = {
+    notifyOnComplete: true,
+    notifyOnApproval: true,
+    notifyOnAnswer: true,
+    uiPopup: false,
+    soundEnabled: false,
+    soundPath: '',
+}
 
-    protected override async load(): Promise<Record<string, unknown>> {
-        return this.doc
-    }
-
-    protected override async persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
-        this.doc[String(ns)] = section
+/**
+ * 受控 volatile 配置面：字段是只读 `get()` 引用（与 Loader 交给 `apply` 的同形），
+ * `set` 只供测试改写——真实部署里改写来自设置页写入设置文档。
+ */
+function liveConfig(initial: Partial<ConfigValues> = {}): { view: ConfigView; set<K extends keyof ConfigValues>(name: K, value: ConfigValues[K]): void } {
+    const values: ConfigValues = { ...DEFAULTS, ...initial }
+    const field = <K extends keyof ConfigValues>(name: K): LiveField<ConfigValues[K]> => ({
+        get: () => values[name],
+    })
+    return {
+        view: {
+            notifyOnComplete: field('notifyOnComplete'),
+            notifyOnApproval: field('notifyOnApproval'),
+            notifyOnAnswer: field('notifyOnAnswer'),
+            uiPopup: field('uiPopup'),
+            soundEnabled: field('soundEnabled'),
+            soundPath: field('soundPath'),
+        },
+        set(name, value): void {
+            values[name] = value
+        },
     }
 }
 
 const fibers: Array<Fiber> = []
 
-async function start(options?: { withSettings?: boolean }): Promise<Context> {
+async function start(live = liveConfig()): Promise<{ ctx: Context; live: ReturnType<typeof liveConfig> }> {
     const ctx = new Context()
-    if (options?.withSettings) {
-        fibers.push(await ctx.plugin(MemorySettings))
-    }
     fibers.push(await ctx.plugin(SessionStore))
     fibers.push(await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 }))
-    fibers.push(await ctx.plugin({ name: 'remind', Config, apply: remindPlugin }, {
-        notifyOnComplete: true,
-        notifyOnApproval: true,
-        notifyOnAnswer: true,
-        uiPopup: false,
-        soundEnabled: false,
-        soundPath: '',
+    // 不传 Config：这里要喂受控的 volatile 面；schema 形状由下面的独立用例断言。
+    fibers.push(await ctx.plugin({
+        name: 'dsh-inform',
+        apply: (scoped: Context) => {
+            remindPlugin(scoped, live.view)
+        },
     }))
-    return ctx
+    return { ctx, live }
 }
 
 afterEach(async () => {
@@ -72,8 +96,13 @@ function createRootSession(ctx: Context, id: SessionId): Session {
 }
 
 describe('dsh-inform 真实组合', () => {
+    it('Config schema 暴露六个字段（设置页按 Loader 条目 id 投影这张 schema）', () => {
+        const fields = Object.keys(Config.dict ?? {}).sort()
+        assert.deepEqual(fields, ['notifyOnAnswer', 'notifyOnApproval', 'notifyOnComplete', 'soundEnabled', 'soundPath', 'uiPopup'])
+    })
+
     it('回合结束 → HTTP 状态端点出现完成提醒；?since 游标生效', async () => {
-        const ctx = await start()
+        const { ctx } = await start()
         const port = ctx.webServer.port
         const session = createRootSession(ctx, SessionId('comp-root-1'))
         assert.equal(ctx.get('webServer') != null, true)
@@ -93,7 +122,7 @@ describe('dsh-inform 真实组合', () => {
     })
 
     it('审批与提问经真实会话日志折叠为未决条目并随决定撤下', async () => {
-        const ctx = await start()
+        const { ctx } = await start()
         const port = ctx.webServer.port
         const session = createRootSession(ctx, SessionId('comp-root-2'))
 
@@ -101,20 +130,20 @@ describe('dsh-inform 真实组合', () => {
         let body = await (await fetch(`http://127.0.0.1:${port}${STATE_PATH}`)).json() as { pending: Array<{ kind: string; summary: string }> }
         assert.equal(body.pending.filter((p) => p.kind === 'approval').length, 1)
 
-        session.append('tool/call', { turn: 1, step: 1, callId: CallId('c-9'), name: 'ask_user_question', arguments: '{"questions":[{"id":"q","question":"覆盖现有文件？"}]}' })
+        session.append('tool/call', { turn: 1, step: 1, callId: ToolCallId('c-9'), name: 'ask_user_question', arguments: '{"questions":[{"id":"q","question":"覆盖现有文件？"}]}' })
         body = await (await fetch(`http://127.0.0.1:${port}${STATE_PATH}`)).json() as typeof body
         const question = body.pending.find((p) => p.kind === 'question')
         assert.ok(question)
         assert.match(question.summary, /覆盖现有文件？/)
 
         session.append('approval/decided', { id: ApprovalRequestId('ap-x'), outcome: 'allowed-once' })
-        session.append('tool/result', { turn: 1, step: 1, message: { role: 'tool', callId: CallId('c-9'), content: 'done' } as never }, { surfaceOp: 'append' })
+        session.append('tool/result', { turn: 1, step: 1, message: { role: 'tool', callId: ToolCallId('c-9'), content: 'done' } as never }, { surfaceOp: 'append' })
         body = await (await fetch(`http://127.0.0.1:${port}${STATE_PATH}`)).json() as typeof body
         assert.equal(body.pending.length, 0)
     })
 
     it('子代理会话的完成不进入提醒流', async () => {
-        const ctx = await start()
+        const { ctx } = await start()
         const port = ctx.webServer.port
         const child = ctx.sessions.create(SessionId('comp-child'), {
             meta: { cwd: process.cwd(), delegationDepth: 1 },
@@ -124,27 +153,9 @@ describe('dsh-inform 真实组合', () => {
         assert.equal(body.recent.length, 0)
     })
 
-    it('settings 命名空间注册成功：默认值可解析、写入持久化', async () => {
-        const ctx = await start({ withSettings: true })
-        const ns = settingsNamespace('dsh-inform')
-        const resolved = ctx.settings.get(ns) as { notifyOnComplete: boolean; uiPopup: boolean; soundEnabled: boolean; soundPath: string } | undefined
-        assert.ok(resolved, '命名空间应已注册')
-        assert.equal(resolved.notifyOnComplete, true)
-        // 新字段默认值：UI 弹窗关、自定义音频不启用、无来源。
-        assert.equal(resolved.uiPopup, false)
-        assert.equal(resolved.soundEnabled, false)
-        assert.equal(resolved.soundPath, '')
-
-        await ctx.settings.update(ns, { notifyOnApproval: false })
-        const after = ctx.settings.get(ns) as { notifyOnApproval: boolean; notifyOnComplete: boolean }
-        assert.equal(after.notifyOnApproval, false)
-        assert.equal(after.notifyOnComplete, true)
-    })
-
-    it('音频代理端点：未配置 404；配置后按 MIME 喂文件；上传槽与 URL 来源', async () => {
-        const ctx = await start({ withSettings: true })
+    it('音频代理端点：未配置 404；改配置后按 MIME 喂文件；上传槽与 URL 来源', async () => {
+        const { ctx, live } = await start()
         const port = ctx.webServer.port
-        const ns = settingsNamespace('dsh-inform')
 
         const base = `http://127.0.0.1:${port}${SOUND_PATH}`
         assert.equal((await fetch(base)).status, 404, '默认（未启用）应 404')
@@ -157,7 +168,9 @@ describe('dsh-inform 真实组合', () => {
         const bytes = Buffer.from('RIFF0000WAVEfmt ', 'utf8')
         await writeFile(wavPath, bytes)
 
-        await ctx.settings.update(ns, { soundEnabled: true, soundPath: wavPath })
+        // 只改配置、不重启条目：端点必须立刻看到新值（volatile getter 契约）。
+        live.set('soundEnabled', true)
+        live.set('soundPath', wavPath)
         let response = await fetch(base)
         assert.equal(response.status, 200)
         assert.match(response.headers.get('content-type') ?? '', /audio\/wav/)
@@ -168,23 +181,23 @@ describe('dsh-inform 真实组合', () => {
         assert.equal(response.status, 200)
 
         // 不存在的文件 → 404。
-        await ctx.settings.update(ns, { soundPath: pathJoin(dir, 'missing.wav') })
+        live.set('soundPath', pathJoin(dir, 'missing.wav'))
         assert.equal((await fetch(base)).status, 404)
 
         // 不支持的扩展名 → 415（本地路径）。
         const txtPath = pathJoin(dir, 'note.txt')
         await writeFile(txtPath, 'x')
-        await ctx.settings.update(ns, { soundPath: txtPath })
+        live.set('soundPath', txtPath)
         assert.equal((await fetch(base)).status, 415)
 
         // http(s) URL → 302 重定向。
-        await ctx.settings.update(ns, { soundPath: 'https://example.com/alert.mp3' })
+        live.set('soundPath', 'https://example.com/alert.mp3')
         response = await fetch(base, { redirect: 'manual' })
         assert.equal(response.status, 302)
         assert.equal(response.headers.get('location'), 'https://example.com/alert.mp3')
 
         // 关闭开关后回到 404。
-        await ctx.settings.update(ns, { soundEnabled: false })
+        live.set('soundEnabled', false)
         assert.equal((await fetch(base)).status, 404)
     })
 
@@ -195,9 +208,8 @@ describe('dsh-inform 真实组合', () => {
         const fakeHome = await mkdtemp(pathJoin(tmpdir(), 'dsh-inform-home-'))
         process.env.DSH_HOME = fakeHome
         try {
-            const ctx = await start({ withSettings: true })
+            const { ctx, live } = await start()
             const port = ctx.webServer.port
-            const ns = settingsNamespace('dsh-inform')
             const bytes = Buffer.from('ID3', 'utf8')
 
             // 非法扩展名 → 415。
@@ -215,7 +227,8 @@ describe('dsh-inform 真实组合', () => {
             assert.equal(body.ext, 'mp3')
 
             // soundPath 置 @stored 后 GET 伺服上传内容（audio/mpeg）。
-            await ctx.settings.update(ns, { soundEnabled: true, soundPath: '@stored' })
+            live.set('soundEnabled', true)
+            live.set('soundPath', '@stored')
             const response = await fetch(`http://127.0.0.1:${port}${SOUND_PATH}`)
             assert.equal(response.status, 200)
             assert.match(response.headers.get('content-type') ?? '', /audio\/mpeg/)
@@ -226,7 +239,7 @@ describe('dsh-inform 真实组合', () => {
     })
 
     it('非法 since 参数得到 400', async () => {
-        const ctx = await start()
+        const { ctx } = await start()
         const port = ctx.webServer.port
         const response = await fetch(`http://127.0.0.1:${port}${STATE_PATH}?since=-3`)
         assert.equal(response.status, 400)
