@@ -6,11 +6,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mobaixingyao/dsh-inform.git"
+    "url": "git+https://github.com/huanxingyunmo/dsh-inform.git"
   },
-  "homepage": "https://github.com/mobaixingyao/dsh-inform#readme",
+  "homepage": "https://github.com/huanxingyunmo/dsh-inform#readme",
   "bugs": {
-    "url": "https://github.com/mobaixingyao/dsh-inform/issues"
+    "url": "https://github.com/huanxingyunmo/dsh-inform/issues"
   },
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

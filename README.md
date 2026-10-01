@@ -66,7 +66,7 @@ pnpm run verify  # typecheck(双 program) + build(host tsc + client 工厂包装
 dsh plugin --profile web add @mobaixingyao/dsh-inform
 
 # 或从 GitHub 安装
-dsh plugin --profile web add github:mobaixingyao/dsh-inform
+dsh plugin --profile web add github:huanxingyunmo/dsh-inform
 
 # 或本地目录安装（开发迭代）
 dsh plugin --profile web add <本仓库克隆目录>
